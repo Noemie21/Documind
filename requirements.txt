@@ -1,0 +1,21 @@
+# Core
+langchain>=0.3.0
+langchain-openai>=0.2.0
+langchain-chroma>=0.1.4
+langchain-community>=0.3.0
+
+# Vector store
+chromadb>=0.5.0
+
+# Document loaders
+pypdf>=4.0.0
+docx2txt>=0.8
+
+# Frontend
+streamlit>=1.38.0
+
+# Utils
+python-dotenv>=1.0.0
+
+# Optional: for better performance
+tiktoken>=0.7.0
