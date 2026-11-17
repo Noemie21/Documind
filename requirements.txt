@@ -1,21 +1,23 @@
-# Core
-langchain>=0.3.0
-langchain-openai>=0.2.0
-langchain-chroma>=0.1.4
-langchain-community>=0.3.0
+# Pinned versions (tested together). Upgrade deliberately and rerun the tests.
+
+# LangChain
+langchain-core==1.2.6
+langchain-openai==1.1.6
+langchain-chroma==1.1.0
+langchain-community==0.4.1
+langchain-text-splitters==1.1.0
+tiktoken==0.12.0
 
 # Vector store
-chromadb>=0.5.0
+chromadb==1.4.0
 
 # Document loaders
-pypdf>=4.0.0
-docx2txt>=0.8
+pypdf==6.5.0
+docx2txt==0.9
+chardet==5.2.0  # encoding detection for .txt files
 
 # Frontend
-streamlit>=1.38.0
+streamlit==1.52.2
 
 # Utils
-python-dotenv>=1.0.0
-
-# Optional: for better performance
-tiktoken>=0.7.0
+python-dotenv==1.2.1

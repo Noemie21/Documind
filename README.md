@@ -4,19 +4,28 @@
 
 DocuMind is an intelligent document assistant that lets you ask questions about your PDF, Word, and text files. It uses semantic search to find relevant information and generates accurate answers with source citations.
 
-![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
-![LangChain](https://img.shields.io/badge/LangChain-0.3+-green.svg)
+[![CI](https://github.com/Noemie21/Documind/actions/workflows/ci.yml/badge.svg)](https://github.com/Noemie21/Documind/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
+![LangChain](https://img.shields.io/badge/LangChain-1.x-green.svg)
 ![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4o--mini-orange.svg)
-![Streamlit](https://img.shields.io/badge/Streamlit-1.38+-red.svg)
+![Streamlit](https://img.shields.io/badge/Streamlit-1.52-red.svg)
 
 ## ✨ Features
 
-- **📄 Multi-format support** - PDF, DOCX, TXT files
+- **📄 Multi-format support** - PDF, DOCX, TXT files (any text encoding)
 - **🔍 Semantic search** - Find relevant information even with different wording
-- **📝 Source citations** - Every answer includes references to the original document
-- **💬 Chat interface** - Natural conversation with your documents
+- **📝 Source citations** - Every answer references the original file name and page
+- **💬 Conversation memory** - Ask follow-ups like *"and what about the second point?"*
+- **⚡ Streaming responses** - Answers appear token by token
 - **📚 Multi-document** - Upload and query multiple documents at once
-- **⚡ Fast responses** - Optimized chunking and retrieval
+- **🔒 Session isolation** - Each browser session has its own private knowledge base
+
+## 🔄 How a question is answered
+
+1. **Condense** - If there is chat history, the follow-up question is rewritten into a standalone question
+2. **Retrieve** - The 4 most similar chunks are fetched from this session's Chroma collection
+3. **Generate** - GPT-4o-mini answers from those chunks (plus recent history) and streams the answer
+4. **Cite** - The retrieved chunks are shown as sources under the answer
 
 ## 🏗️ Architecture
 
@@ -41,15 +50,15 @@ DocuMind is an intelligent document assistant that lets you ask questions about 
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.10+
 - OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/documind.git
-cd documind
+git clone https://github.com/Noemie21/Documind.git
+cd Documind
 
 # Create virtual environment
 python -m venv venv
@@ -76,7 +85,13 @@ Open http://localhost:8501 in your browser.
 1. **Upload documents** - Drag and drop PDF, DOCX, or TXT files in the sidebar
 2. **Wait for processing** - Documents are chunked and embedded automatically
 3. **Ask questions** - Type your question in the chat input
-4. **View sources** - Click on "Sources" to see where the information came from
+4. **Ask follow-ups** - The conversation is remembered, so you can refer to previous answers
+5. **View sources** - Click on "Sources" to see where the information came from
+
+> **Note:** documents are stored **in memory, per browser session**. Reloading the page or
+> restarting the app starts from an empty knowledge base, and users never see each other's files.
+> To keep a knowledge base on disk, create the backend with
+> `DocuMind(persist_directory="./chroma_db", collection_name="my-kb")`.
 
 ### Example questions
 
@@ -98,30 +113,43 @@ Open http://localhost:8501 in your browser.
 ## 📁 Project Structure
 
 ```
-documind/
-├── app.py              # RAG backend (DocumentProcessor, VectorStore, RAGChain)
-├── streamlit_app.py    # Streamlit frontend
-├── requirements.txt    # Python dependencies
-├── .env.example        # Environment variables template
-└── README.md           # This file
+Documind/
+├── app.py                  # RAG backend (DocumentProcessor, VectorStore, RAGChain, DocuMind)
+├── streamlit_app.py        # Streamlit frontend
+├── tests/                  # Pytest suite (offline: fake embeddings and LLM)
+├── requirements.txt        # Pinned runtime dependencies
+├── requirements-dev.txt    # + pytest, ruff
+├── pyproject.toml          # pytest and ruff configuration
+├── Dockerfile
+├── .github/workflows/ci.yml
+└── .env.example            # Environment variables template
 ```
 
 ## 🔧 Configuration
 
-You can customize the RAG pipeline by modifying these parameters in `app.py`:
+All settings are environment variables (put them in `.env`):
 
-```python
-# Chunking parameters
-chunk_size = 1000      # Characters per chunk
-chunk_overlap = 200    # Overlap between chunks
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENAI_API_KEY` | *(required)* | OpenAI API key |
+| `DOCUMIND_LLM_MODEL` | `gpt-4o-mini` | Chat model used for answers |
+| `DOCUMIND_EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model |
+| `DOCUMIND_CHUNK_SIZE` | `1000` | Characters per chunk |
+| `DOCUMIND_CHUNK_OVERLAP` | `200` | Overlap between chunks |
+| `DOCUMIND_TOP_K` | `4` | Number of chunks retrieved per question |
+| `DOCUMIND_MAX_HISTORY` | `6` | Chat messages kept as conversation memory |
 
-# Retrieval parameters
-k = 4                  # Number of chunks to retrieve
+## 🧪 Tests
 
-# LLM parameters
-model = "gpt-4o-mini"  # OpenAI model to use
-temperature = 0        # Response randomness (0 = deterministic)
+The test suite runs fully offline (fake embeddings and a fake LLM, no API key needed):
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+ruff check .
 ```
+
+The same checks run on every push and pull request through GitHub Actions.
 
 ## 🚀 Deployment
 
@@ -142,8 +170,10 @@ docker run -p 8501:8501 -e OPENAI_API_KEY=your-key documind
 ## 📈 Future Improvements
 
 - [ ] Add support for more file formats (HTML, Markdown)
-- [ ] Implement conversation memory
 - [ ] Add hybrid search (semantic + keyword)
+- [ ] Relevance threshold to avoid answering from unrelated chunks
+- [ ] Answer-quality evaluation set (e.g. RAGAS)
+- [ ] Remove a single document from the knowledge base
 - [ ] Support for local LLMs (Ollama, vLLM)
 - [ ] Add document comparison feature
 - [ ] Implement reranking with Cohere

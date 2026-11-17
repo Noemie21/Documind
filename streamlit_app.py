@@ -8,6 +8,7 @@ import os
 import tempfile
 
 import streamlit as st
+
 from app import DocuMind
 
 # Page config
@@ -52,6 +53,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "documents" not in st.session_state:
     st.session_state.documents = st.session_state.documind.list_documents()
+if "uploader_key" not in st.session_state:
+    st.session_state.uploader_key = 0
 
 
 def render_sources(sources):
@@ -83,6 +86,7 @@ def main():
             "Upload documents",
             type=["pdf", "txt", "docx"],
             accept_multiple_files=True,
+            key=f"uploader_{st.session_state.uploader_key}",
             help="Supported formats: PDF, TXT, DOCX"
         )
         
@@ -92,7 +96,8 @@ def main():
                 if uploaded_file.name not in st.session_state.documents:
                     with st.spinner(f"Processing {uploaded_file.name}..."):
                         # Save to temp file
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp:
+                        suffix = os.path.splitext(uploaded_file.name)[1]
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                             tmp.write(uploaded_file.getvalue())
                             tmp_path = tmp.name
                         
@@ -114,12 +119,18 @@ def main():
             st.subheader("Loaded documents")
             for doc in st.session_state.documents:
                 st.markdown(f"• {doc}")
-            
-            # Clear button
+            st.caption("Documents are kept for this browser session only.")
+
+            if st.session_state.messages and st.button("💬 New conversation"):
+                st.session_state.messages = []
+                st.rerun()
+
             if st.button("🗑️ Clear all documents", type="secondary"):
                 st.session_state.documind.clear_knowledge_base()
                 st.session_state.documents = []
                 st.session_state.messages = []
+                # New uploader key, otherwise the files still in the widget get re-indexed
+                st.session_state.uploader_key += 1
                 st.rerun()
         
         # Info
@@ -134,6 +145,7 @@ def main():
         - 📄 Multi-document support
         - 🔍 Semantic search
         - 📝 Source citations
+        - 💬 Follow-up questions (conversation memory)
         - ⚡ Streaming responses
         """)
     
@@ -176,29 +188,33 @@ def main():
         
         # Chat input
         if prompt := st.chat_input("Ask a question about your documents..."):
-            # Add user message
+            # History *before* this question, used to understand follow-ups
+            history = [
+                {"role": m["role"], "content": m["content"]}
+                for m in st.session_state.messages
+            ]
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
-            
-            # Generate response
-            with st.chat_message("assistant"):
-                with st.spinner("Thinking..."):
-                    result = st.session_state.documind.ask(prompt)
-                
-                st.markdown(result["answer"])
 
-                sources = [
-                    {"filename": s.filename, "page": s.page, "content": s.content}
-                    for s in result["sources"]
-                ]
+            # Generate a streamed response
+            with st.chat_message("assistant"):
+                try:
+                    with st.spinner("Searching your documents..."):
+                        stream, sources = st.session_state.documind.stream_answer(prompt, history)
+                    answer = st.write_stream(stream)
+                except Exception as e:
+                    st.error(f"Error while generating the answer: {e}")
+                    st.session_state.messages.pop()  # drop the unanswered question
+                    return
+
+                sources = [s.to_dict() for s in sources]
                 if sources:
                     render_sources(sources)
 
-                # Save to history
                 st.session_state.messages.append({
                     "role": "assistant",
-                    "content": result["answer"],
+                    "content": answer,
                     "sources": sources,
                 })
 
