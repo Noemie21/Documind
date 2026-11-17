@@ -16,6 +16,7 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY app.py streamlit_app.py ./
+COPY .streamlit/ .streamlit/
 
 RUN useradd --create-home --uid 1000 documind  # uid 1000 is what Hugging Face Spaces expects
 USER documind

@@ -18,31 +18,88 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom CSS
+# Custom CSS on top of the theme in .streamlit/config.toml (matches the noemie.pro portfolio).
+# Selectors use Streamlit's data-testid attributes, which are the most stable hooks available.
 st.markdown("""
 <style>
-    .stApp {
-        max-width: 1200px;
-        margin: 0 auto;
+    :root {
+        --dm-violet: #8b5cf6;
+        --dm-violet-light: #a78bfa;
+        --dm-card: #18181b;
+        --dm-border: #27272a;
+        --dm-muted: #94a3b8;
+        --dm-gradient: linear-gradient(90deg, #a78bfa, #c084fc, #f472b6);
     }
+
+    /* Layout */
+    .block-container { max-width: 1000px; padding-top: 2.5rem; }
+    [data-testid="stHeader"] { background: transparent; }
+
+    /* Hero */
+    .dm-hero h1 {
+        font-size: clamp(2.2rem, 5vw, 3rem); font-weight: 700; letter-spacing: -0.03em;
+        margin: 0; padding: 0; color: #fff;
+    }
+    .dm-hero .gradient-text {
+        background: var(--dm-gradient); -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .dm-hero p { color: var(--dm-muted); font-size: 1.05rem; margin: 0.35rem 0 1.5rem; }
+    .dm-eyebrow {
+        font-family: 'JetBrains Mono', monospace; color: var(--dm-violet-light);
+        font-size: 0.85rem; margin-bottom: 0.4rem;
+    }
+
+    /* Feature cards (empty state) */
+    .dm-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+    .dm-card {
+        background: var(--dm-card); border: 1px solid var(--dm-border); border-radius: 1rem;
+        padding: 1.25rem 1.25rem 1rem; transition: transform .25s ease, box-shadow .25s ease;
+    }
+    .dm-card:hover { transform: translateY(-4px); box-shadow: 0 20px 40px -15px rgba(139, 92, 246, .3); }
+    .dm-card h4 { margin: 0 0 .5rem; font-size: 1.05rem; color: #fff; }
+    .dm-card ul { margin: 0; padding-left: 1.1rem; color: var(--dm-muted); font-size: .92rem; }
+    .dm-tags { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1.5rem 0 0; }
+    .dm-tag {
+        background: rgba(139, 92, 246, .1); color: var(--dm-violet-light);
+        padding: .2rem .75rem; border-radius: 999px; font-size: .85rem;
+    }
+
+    /* Chat messages */
+    [data-testid="stChatMessage"] {
+        background: var(--dm-card); border: 1px solid var(--dm-border); border-radius: 1rem;
+        padding: 1rem 1.1rem;
+    }
+    [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+        background: rgba(139, 92, 246, .1); border-color: rgba(139, 92, 246, .35);
+    }
+    [data-testid="stChatMessageAvatarAssistant"] { background: var(--dm-gradient); }
+    [data-testid="stChatMessageAvatarUser"] { background: #7c3aed; }
+
+    /* Chat input */
+    [data-testid="stChatInput"] { border-radius: 1rem; }
+    [data-testid="stChatInput"]:focus-within { box-shadow: 0 0 0 2px rgba(139, 92, 246, .45); }
+
+    /* Sidebar */
+    [data-testid="stSidebar"] h2 { font-size: 1.1rem; }
+    [data-testid="stFileUploaderDropzone"] {
+        border: 1px dashed rgba(139, 92, 246, .5); background: rgba(139, 92, 246, .05);
+    }
+
+    /* Primary-looking buttons get the portfolio gradient on hover */
+    .stButton > button { border-radius: 999px; transition: all .2s ease; }
+    .stButton > button:hover { border-color: var(--dm-violet); color: var(--dm-violet-light); }
+
+    /* Sources */
     .source-box {
-        background-color: rgba(128, 128, 128, 0.12);  /* readable in light and dark themes */
-        border-radius: 10px;
-        padding: 10px;
-        margin: 5px 0;
-        font-size: 0.85em;
+        background: rgba(139, 92, 246, .06); border-left: 3px solid var(--dm-violet);
+        border-radius: .5rem; padding: .6rem .8rem; margin: .4rem 0; font-size: .85em;
     }
-    .chat-message {
-        padding: 1rem;
-        border-radius: 10px;
-        margin: 1rem 0;
-    }
-    .user-message {
-        background-color: #e3f2fd;
-    }
-    .assistant-message {
-        background-color: #f5f5f5;
-    }
+    .source-box strong { color: var(--dm-violet-light); }
+    .source-box em { color: var(--dm-muted); }
+
+    /* Scrollbar like the portfolio */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-thumb { background: var(--dm-violet); border-radius: 4px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -98,8 +155,13 @@ def render_sources(sources):
 
 def main():
     # Header
-    st.title("🧠 DocuMind")
-    st.markdown("*Chat with your documents using AI*")
+    st.markdown("""
+    <div class="dm-hero">
+        <div class="dm-eyebrow">RAG System</div>
+        <h1>🧠 Docu<span class="gradient-text">Mind</span></h1>
+        <p>Chat with your documents. Every answer cites the file and page it comes from.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     api_key = get_api_key()
     if not api_key:
@@ -182,32 +244,24 @@ def main():
     # Main chat area
     if not st.session_state.documents:
         st.info("👈 Upload documents to get started")
-        
-        # Demo section
-        st.markdown("---")
-        st.markdown("### 🎯 What can DocuMind do?")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown("""
-            **📚 Research**
-            - Analyze academic papers
-            - Extract key findings
-            - Compare methodologies
-            """)
-        with col2:
-            st.markdown("""
-            **💼 Business**
-            - Query contracts
-            - Summarize reports
-            - Find specific clauses
-            """)
-        with col3:
-            st.markdown("""
-            **📖 Learning**
-            - Study materials
-            - Quick fact lookup
-            - Concept explanations
-            """)
+        st.markdown("""
+        <div class="dm-cards">
+            <div class="dm-card"><h4>📚 Research</h4><ul>
+                <li>Analyze academic papers</li><li>Extract key findings</li><li>Compare methodologies</li>
+            </ul></div>
+            <div class="dm-card"><h4>💼 Business</h4><ul>
+                <li>Query contracts</li><li>Summarize reports</li><li>Find specific clauses</li>
+            </ul></div>
+            <div class="dm-card"><h4>📖 Learning</h4><ul>
+                <li>Study materials</li><li>Quick fact lookup</li><li>Concept explanations</li>
+            </ul></div>
+        </div>
+        <div class="dm-tags">
+            <span class="dm-tag">LangChain</span><span class="dm-tag">ChromaDB</span>
+            <span class="dm-tag">GPT-4o-mini</span><span class="dm-tag">Streaming</span>
+            <span class="dm-tag">Conversation memory</span>
+        </div>
+        """, unsafe_allow_html=True)
     else:
         # Display chat history
         for message in st.session_state.messages:

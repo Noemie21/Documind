@@ -1,0 +1,25 @@
+# Theme matching the noemie.pro portfolio (dark, violet accent, Inter / JetBrains Mono)
+
+[theme]
+base = "dark"
+primaryColor = "#8b5cf6"           # violet-500
+backgroundColor = "#0a0a0f"        # portfolio page background
+secondaryBackgroundColor = "#18181b"  # portfolio cards
+textColor = "#f1f5f9"              # slate-100
+linkColor = "#a78bfa"              # violet-400
+borderColor = "#27272a"
+showWidgetBorder = true
+baseRadius = "0.75rem"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+
+[theme.sidebar]
+backgroundColor = "#12121a"        # portfolio dark card
+secondaryBackgroundColor = "#1e1e2e"
+borderColor = "#1e1e2e"
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
