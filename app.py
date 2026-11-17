@@ -170,12 +170,15 @@ class VectorStore:
         persist_directory: Optional[str] = None,
         collection_name: Optional[str] = None,
         embeddings: Optional[Embeddings] = None,
+        api_key: Optional[str] = None,
     ):
         self.persist_directory = persist_directory
         self.collection_name = collection_name or f"documind-{uuid.uuid4().hex}"
         if embeddings is None:
             from langchain_openai import OpenAIEmbeddings
-            embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
+            # Only pass api_key when given: api_key=None would disable the OPENAI_API_KEY fallback
+            key_kwargs = {"api_key": api_key} if api_key else {}
+            embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL, **key_kwargs)
         self.embeddings = embeddings
         self.vectorstore: Optional[Chroma] = None
 
@@ -245,12 +248,14 @@ class RAGChain:
         model: str = LLM_MODEL,
         llm: Optional[BaseChatModel] = None,
         k: int = TOP_K,
+        api_key: Optional[str] = None,
     ):
         self.vector_store = vector_store
         self.k = k
         if llm is None:
             from langchain_openai import ChatOpenAI
-            llm = ChatOpenAI(model=model, temperature=0, streaming=True)
+            key_kwargs = {"api_key": api_key} if api_key else {}
+            llm = ChatOpenAI(model=model, temperature=0, streaming=True, **key_kwargs)
         self.llm = llm
         self.answer_chain = ANSWER_PROMPT | self.llm | StrOutputParser()
         self.condense_chain = CONDENSE_PROMPT | self.llm | StrOutputParser()
@@ -296,25 +301,29 @@ class DocuMind:
         collection_name: Optional[str] = None,
         embeddings: Optional[Embeddings] = None,
         llm: Optional[BaseChatModel] = None,
+        api_key: Optional[str] = None,
     ):
+        """`api_key` overrides OPENAI_API_KEY (e.g. a key typed by the visitor)."""
         self.processor = DocumentProcessor()
         self.vector_store = VectorStore(
             persist_directory=persist_directory,
             collection_name=collection_name,
             embeddings=embeddings,
+            api_key=api_key,
         )
         self._llm = llm
+        self._api_key = api_key
         self.rag_chain: Optional[RAGChain] = None
 
         if self.vector_store.load_existing():
-            self.rag_chain = RAGChain(self.vector_store, llm=self._llm)
+            self.rag_chain = RAGChain(self.vector_store, llm=self._llm, api_key=self._api_key)
 
     def add_document(self, file_path: str, display_name: Optional[str] = None) -> int:
         """Add a document to the knowledge base, returns the number of chunks"""
         chunks = self.processor.process_document(file_path, display_name=display_name)
         self.vector_store.add_documents(chunks)
         if chunks and self.rag_chain is None:
-            self.rag_chain = RAGChain(self.vector_store, llm=self._llm)
+            self.rag_chain = RAGChain(self.vector_store, llm=self._llm, api_key=self._api_key)
         return len(chunks)
 
     def ask(self, question: str, history: Optional[ChatHistory] = None) -> Dict[str, Any]:

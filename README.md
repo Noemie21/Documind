@@ -1,3 +1,15 @@
+---
+title: DocuMind
+emoji: 🧠
+colorFrom: indigo
+colorTo: blue
+sdk: docker
+app_port: 8501
+pinned: false
+license: mit
+short_description: Chat with your PDF, Word and text documents (RAG)
+---
+
 # 🧠 DocuMind - AI Document Assistant
 
 > **Chat with your documents using RAG (Retrieval-Augmented Generation)**
@@ -153,18 +165,42 @@ The same checks run on every push and pull request through GitHub Actions.
 
 ## 🚀 Deployment
 
-### Hugging Face Spaces (Free)
+### 🔑 API key: server key or visitor key
 
-1. Create a new Space at [huggingface.co/spaces](https://huggingface.co/spaces)
-2. Select "Streamlit" as the SDK
-3. Upload all files
-4. Add your `OPENAI_API_KEY` in Settings > Secrets
+- If `OPENAI_API_KEY` is set on the server, everybody uses that key.
+- If it is **not** set, each visitor is asked for **their own OpenAI key** in the sidebar.
+  The key only lives in that browser session's memory. This is the recommended setup for a
+  public demo, so strangers cannot spend your credits.
+
+### Hugging Face Spaces (free, Docker)
+
+The front matter at the top of this README is the Space configuration (`sdk: docker`, port 8501).
+
+1. Create a Space at [huggingface.co/new-space](https://huggingface.co/new-space), SDK **Docker**, template **Blank**
+2. Push this repository to it:
+   ```bash
+   git remote add space https://huggingface.co/spaces/<hf-username>/documind
+   git push space main
+   ```
+   (use a Hugging Face access token with *write* permission as the password)
+3. Leave `OPENAI_API_KEY` unset for a public demo, or add it under *Settings → Variables and secrets*
+4. If uploads fail with a 403 error inside the embedded page, add the variable
+   `STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION=false` in the Space settings
+
+The app is then available at `https://<hf-username>-documind.hf.space`.
+
+### Embed it on your own website
+
+[`deploy/website/documind/index.html`](deploy/website/documind/index.html) is a standalone page that
+presents the project and embeds the Space. Upload the `documind/` folder to the web root of any static
+host (e.g. via FTP to `www/` on OVH shared hosting) to serve it at `https://your-domain/documind/`.
 
 ### Docker
 
 ```bash
 docker build -t documind .
-docker run -p 8501:8501 -e OPENAI_API_KEY=your-key documind
+docker run -p 8501:8501 documind                              # visitors enter their own key
+docker run -p 8501:8501 -e OPENAI_API_KEY=sk-... documind     # or use a server key
 ```
 
 ## 📈 Future Improvements

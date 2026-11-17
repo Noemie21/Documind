@@ -39,3 +39,24 @@ def test_chat_streams_answer_with_escaped_sources(tmp_path):
 
     rendered = " ".join(md.value for md in at.markdown)
     assert "<script>" not in rendered and "&lt;script&gt;" in rendered
+
+
+def test_visitor_must_enter_key_when_server_has_none(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    at = AppTest.from_file(APP, default_timeout=60).run()
+    assert not at.exception
+    assert any("Enter your OpenAI API key" in info.value for info in at.info)
+    assert "documind" not in at.session_state  # nothing created without a key
+
+    at.text_input[0].set_value("sk-visitor-key").run()
+    assert not at.exception
+    assert at.session_state["api_key_in_use"] == "sk-visitor-key"
+    assert at.session_state["documind"]._api_key == "sk-visitor-key"
+    assert any("Upload documents" in info.value for info in at.info)
+
+
+def test_no_key_prompt_when_server_has_key(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-server-key")
+    at = AppTest.from_file(APP, default_timeout=60).run()
+    assert not at.exception
+    assert len(at.text_input) == 0

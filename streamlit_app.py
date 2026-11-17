@@ -26,7 +26,7 @@ st.markdown("""
         margin: 0 auto;
     }
     .source-box {
-        background-color: #f0f2f6;
+        background-color: rgba(128, 128, 128, 0.12);  /* readable in light and dark themes */
         border-radius: 10px;
         padding: 10px;
         margin: 5px 0;
@@ -46,15 +46,39 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state (each browser session gets its own in-memory collection)
-if "documind" not in st.session_state:
-    st.session_state.documind = DocuMind()
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "documents" not in st.session_state:
-    st.session_state.documents = st.session_state.documind.list_documents()
-if "uploader_key" not in st.session_state:
-    st.session_state.uploader_key = 0
+# When the server has no OPENAI_API_KEY (e.g. a public demo), each visitor
+# provides their own key. It only lives in this browser session's memory.
+SERVER_API_KEY = os.getenv("OPENAI_API_KEY")
+
+
+def get_api_key():
+    """Return the OpenAI key to use, asking the visitor for one if needed."""
+    if SERVER_API_KEY:
+        return SERVER_API_KEY
+    with st.sidebar:
+        st.header("🔑 OpenAI API key")
+        key = st.text_input(
+            "Your OpenAI API key",
+            type="password",
+            placeholder="sk-...",
+            help="Used only for this browser session, never stored. "
+                 "Get one at https://platform.openai.com/api-keys",
+        ).strip()
+        st.caption("Your key stays in this session's memory and is sent only to OpenAI.")
+    return key or None
+
+
+def init_session(api_key):
+    """Create (or recreate when the key changes) the per-session backend."""
+    key_changed = st.session_state.get("api_key_in_use", api_key) != api_key
+    if "documind" not in st.session_state or key_changed:
+        st.session_state.documind = DocuMind(api_key=api_key)
+        st.session_state.documents = st.session_state.documind.list_documents()
+        st.session_state.messages = []
+    st.session_state.api_key_in_use = api_key
+    st.session_state.setdefault("messages", [])
+    st.session_state.setdefault("documents", st.session_state.documind.list_documents())
+    st.session_state.setdefault("uploader_key", 0)
 
 
 def render_sources(sources):
@@ -76,7 +100,13 @@ def main():
     # Header
     st.title("🧠 DocuMind")
     st.markdown("*Chat with your documents using AI*")
-    
+
+    api_key = get_api_key()
+    if not api_key:
+        st.info("🔑 Enter your OpenAI API key in the sidebar to get started.")
+        st.stop()
+    init_session(api_key)
+
     # Sidebar
     with st.sidebar:
         st.header("📄 Documents")
