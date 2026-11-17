@@ -4,7 +4,8 @@ A simple but production-ready RAG pipeline for document Q&A
 """
 
 import os
-from typing import List, Dict, Any
+import uuid
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
@@ -24,7 +25,7 @@ load_dotenv()
 class Source:
     """Represents a source document chunk"""
     content: str
-    page: int
+    page: Optional[int]  # 1-based page number, None for formats without pages
     filename: str
 
 
@@ -55,32 +56,52 @@ class DocumentProcessor:
         loader = loader_class(file_path)
         return loader.load()
     
-    def process_document(self, file_path: str) -> List[Any]:
-        """Load and chunk a document"""
+    def process_document(self, file_path: str, display_name: Optional[str] = None) -> List[Any]:
+        """Load and chunk a document.
+
+        `display_name` is the name shown in citations (e.g. the original upload
+        name when `file_path` points to a temporary file).
+        """
         documents = self.load_document(file_path)
-        
-        # Add filename metadata
-        filename = os.path.basename(file_path)
+
+        # Add filename metadata and normalize page numbers (1-based, PDF only)
+        filename = display_name or os.path.basename(file_path)
         for doc in documents:
             doc.metadata["filename"] = filename
+            page = doc.metadata.get("page")
+            if isinstance(page, int):
+                doc.metadata["page"] = page + 1  # PyPDFLoader is 0-based
+            else:
+                doc.metadata.pop("page", None)
         
         chunks = self.text_splitter.split_documents(documents)
         return chunks
 
 
 class VectorStore:
-    """Manages the vector database"""
-    
-    def __init__(self, persist_directory: str = "./chroma_db"):
+    """Manages the vector database.
+
+    Each instance owns its own Chroma collection, so two sessions never see
+    each other's documents. By default the store is in-memory; pass a
+    `persist_directory` (and a stable `collection_name`) to keep it on disk.
+    """
+
+    def __init__(
+        self,
+        persist_directory: Optional[str] = None,
+        collection_name: Optional[str] = None,
+    ):
         self.persist_directory = persist_directory
+        self.collection_name = collection_name or f"documind-{uuid.uuid4().hex}"
         self.embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
         self.vectorstore = None
-    
+
     def create_from_documents(self, documents: List[Any]) -> None:
         """Create a new vector store from documents"""
         self.vectorstore = Chroma.from_documents(
             documents=documents,
             embedding=self.embeddings,
+            collection_name=self.collection_name,
             persist_directory=self.persist_directory
         )
     
@@ -92,14 +113,25 @@ class VectorStore:
             self.vectorstore.add_documents(documents)
     
     def load_existing(self) -> bool:
-        """Load existing vector store if available"""
-        if os.path.exists(self.persist_directory):
-            self.vectorstore = Chroma(
-                persist_directory=self.persist_directory,
-                embedding_function=self.embeddings
-            )
-            return True
-        return False
+        """Load an existing persisted collection, if it has documents"""
+        if not self.persist_directory or not os.path.exists(self.persist_directory):
+            return False
+        store = Chroma(
+            collection_name=self.collection_name,
+            persist_directory=self.persist_directory,
+            embedding_function=self.embeddings
+        )
+        if not store.get(limit=1)["ids"]:
+            return False
+        self.vectorstore = store
+        return True
+
+    def list_filenames(self) -> List[str]:
+        """Names of the documents currently stored"""
+        if self.vectorstore is None:
+            return []
+        metadatas = self.vectorstore.get(include=["metadatas"])["metadatas"]
+        return sorted({m.get("filename", "Unknown") for m in metadatas if m})
     
     def similarity_search(self, query: str, k: int = 4) -> List[Any]:
         """Search for similar documents"""
@@ -114,10 +146,9 @@ class VectorStore:
         return self.vectorstore.as_retriever(search_kwargs={"k": k})
     
     def clear(self) -> None:
-        """Clear the vector store"""
-        if os.path.exists(self.persist_directory):
-            import shutil
-            shutil.rmtree(self.persist_directory)
+        """Delete this store's collection (other collections are untouched)"""
+        if self.vectorstore is not None:
+            self.vectorstore.delete_collection()
         self.vectorstore = None
 
 
@@ -152,7 +183,9 @@ ANSWER:"""
         def format_docs(docs):
             formatted = []
             for doc in docs:
-                source = f"[{doc.metadata.get('filename', 'Unknown')} - Page {doc.metadata.get('page', 'N/A')}]"
+                filename = doc.metadata.get("filename", "Unknown")
+                page = doc.metadata.get("page")
+                source = f"[{filename} - Page {page}]" if page else f"[{filename}]"
                 formatted.append(f"{source}\n{doc.page_content}")
             return "\n\n---\n\n".join(formatted)
         
@@ -201,7 +234,7 @@ ANSWER:"""
         sources = [
             Source(
                 content=doc.page_content[:200] + "...",
-                page=doc.metadata.get("page", 0),
+                page=doc.metadata.get("page"),
                 filename=doc.metadata.get("filename", "Unknown")
             )
             for doc in docs
@@ -219,17 +252,24 @@ ANSWER:"""
 class DocuMind:
     """Main application class"""
     
-    def __init__(self, persist_directory: str = "./chroma_db"):
+    def __init__(
+        self,
+        persist_directory: Optional[str] = None,
+        collection_name: Optional[str] = None,
+    ):
         self.processor = DocumentProcessor()
-        self.vector_store = VectorStore(persist_directory=persist_directory)
+        self.vector_store = VectorStore(
+            persist_directory=persist_directory,
+            collection_name=collection_name,
+        )
         self.rag_chain = None
-        
+
         if self.vector_store.load_existing():
             self.rag_chain = RAGChain(self.vector_store)
-    
-    def add_document(self, file_path: str) -> int:
+
+    def add_document(self, file_path: str, display_name: Optional[str] = None) -> int:
         """Add a document to the knowledge base"""
-        chunks = self.processor.process_document(file_path)
+        chunks = self.processor.process_document(file_path, display_name=display_name)
         self.vector_store.add_documents(chunks)
         self.rag_chain = RAGChain(self.vector_store)
         return len(chunks)
@@ -253,6 +293,10 @@ class DocuMind:
         self.vector_store.clear()
         self.rag_chain = None
     
+    def list_documents(self) -> List[str]:
+        """Names of the documents in the knowledge base"""
+        return self.vector_store.list_filenames()
+
     def is_ready(self) -> bool:
         """Check if the system is ready"""
         return self.rag_chain is not None

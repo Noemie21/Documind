@@ -3,9 +3,11 @@ DocuMind - Streamlit Frontend
 Chat interface for document Q&A
 """
 
-import streamlit as st
-import tempfile
+import html
 import os
+import tempfile
+
+import streamlit as st
 from app import DocuMind
 
 # Page config
@@ -43,13 +45,28 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state
+# Initialize session state (each browser session gets its own in-memory collection)
 if "documind" not in st.session_state:
     st.session_state.documind = DocuMind()
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "documents" not in st.session_state:
-    st.session_state.documents = []
+    st.session_state.documents = st.session_state.documind.list_documents()
+
+
+def render_sources(sources):
+    """Render source chunks; all document-derived text is HTML-escaped."""
+    with st.expander("📚 Sources"):
+        for src in sources:
+            filename = html.escape(str(src["filename"]))
+            content = html.escape(str(src["content"]))
+            page = f" - Page {src['page']}" if src.get("page") else ""
+            st.markdown(f"""
+            <div class="source-box">
+                <strong>{filename}</strong>{page}<br>
+                <em>{content}</em>
+            </div>
+            """, unsafe_allow_html=True)
 
 
 def main():
@@ -81,7 +98,9 @@ def main():
                         
                         try:
                             # Add to knowledge base
-                            chunks = st.session_state.documind.add_document(tmp_path)
+                            chunks = st.session_state.documind.add_document(
+                                tmp_path, display_name=uploaded_file.name
+                            )
                             st.session_state.documents.append(uploaded_file.name)
                             st.success(f"✅ {uploaded_file.name} ({chunks} chunks)")
                         except Exception as e:
@@ -152,15 +171,8 @@ def main():
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
-                if "sources" in message and message["sources"]:
-                    with st.expander("📚 Sources"):
-                        for src in message["sources"]:
-                            st.markdown(f"""
-                            <div class="source-box">
-                                <strong>{src['filename']}</strong> - Page {src['page']}<br>
-                                <em>{src['content']}</em>
-                            </div>
-                            """, unsafe_allow_html=True)
+                if message.get("sources"):
+                    render_sources(message["sources"])
         
         # Chat input
         if prompt := st.chat_input("Ask a question about your documents..."):
@@ -175,26 +187,19 @@ def main():
                     result = st.session_state.documind.ask(prompt)
                 
                 st.markdown(result["answer"])
-                
-                # Show sources
-                if result["sources"]:
-                    with st.expander("📚 Sources"):
-                        for src in result["sources"]:
-                            st.markdown(f"""
-                            <div class="source-box">
-                                <strong>{src.filename}</strong> - Page {src.page}<br>
-                                <em>{src.content}</em>
-                            </div>
-                            """, unsafe_allow_html=True)
-                
+
+                sources = [
+                    {"filename": s.filename, "page": s.page, "content": s.content}
+                    for s in result["sources"]
+                ]
+                if sources:
+                    render_sources(sources)
+
                 # Save to history
                 st.session_state.messages.append({
                     "role": "assistant",
                     "content": result["answer"],
-                    "sources": [
-                        {"filename": s.filename, "page": s.page, "content": s.content}
-                        for s in result["sources"]
-                    ]
+                    "sources": sources,
                 })
 
 
