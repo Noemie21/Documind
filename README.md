@@ -184,8 +184,8 @@ The front matter at the top of this README is the Space configuration (`sdk: doc
    ```
    (use a Hugging Face access token with *write* permission as the password)
 3. Leave `OPENAI_API_KEY` unset for a public demo, or add it under *Settings → Variables and secrets*
-4. If uploads fail with a 403 error inside the embedded page, add the variable
-   `STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION=false` in the Space settings
+4. Uploads work inside an iframe on another site because the Docker image sets
+   `STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION=false` (browsers block Streamlit's XSRF cookie in third-party iframes)
 
 The app is then available at `https://<hf-username>-documind.hf.space`.
 
